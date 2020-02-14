@@ -196,6 +196,10 @@
 #include <mutex>
 #include <string>
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 #include "re2/stringpiece.h"
 
 namespace re2 {
@@ -947,6 +951,51 @@ class LazyRE2 {
   void operator=(const LazyRE2&);  // disallowed
 };
 #endif
+
+namespace hooks {
+
+// Most platforms support thread_local. Older versions of iOS don't support
+// thread_local, but for the sake of brevity, we lump together all versions
+// of Apple platforms that aren't macOS. If an iOS application really needs
+// the context pointee someday, we can get more specific then...
+#define RE2_HAVE_THREAD_LOCAL
+#if defined(__APPLE__) && defined(TARGET_OS_MAC) && !defined(TARGET_OS_OSX)
+#undef RE2_HAVE_THREAD_LOCAL
+#endif
+
+// A hook must not make any assumptions regarding the lifetime of the context
+// pointee beyond the current invocation of the hook. Pointers and references
+// obtained via the context pointee should be considered invalidated when the
+// hook returns. Hence, any data about the context pointee (e.g. its pattern)
+// would have to be copied in order for it to be kept for an indefinite time.
+//
+// A hook must not use RE2 for matching. Control flow reentering RE2::Match()
+// could result in infinite mutual recursion. To discourage that possibility,
+// RE2 will not maintain the context pointer correctly when used in that way.
+#ifdef RE2_HAVE_THREAD_LOCAL
+extern thread_local const RE2* context;
+#endif
+
+struct DFAStateCacheReset {
+  int64_t state_budget;
+  size_t state_cache_size;
+};
+
+struct DFASearchFailure {
+  // Nothing yet...
+};
+
+#define DECLARE_HOOK(type)                  \
+  using type##Callback = void(const type&); \
+  void Set##type##Hook(type##Callback* cb); \
+  type##Callback* Get##type##Hook();
+
+DECLARE_HOOK(DFAStateCacheReset)
+DECLARE_HOOK(DFASearchFailure)
+
+#undef DECLARE_HOOK
+
+}  // namespace hooks
 
 }  // namespace re2
 
