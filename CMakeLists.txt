@@ -39,6 +39,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
   if(MSVC_VERSION LESS 1920)
     message(FATAL_ERROR "you need Visual Studio 2019 or later")
   endif()
+  if(BUILD_SHARED_LIBS)
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+  endif()
   # CMake defaults to /W3, but some users like /W4 (or /Wall) and /WX,
   # so we disable various warnings that aren't particularly helpful.
   add_compile_options(/wd4100 /wd4201 /wd4456 /wd4457 /wd4702 /wd4815)
@@ -140,11 +143,6 @@ set_target_properties(re2 PROPERTIES PUBLIC_HEADER "${RE2_HEADERS}")
 set_target_properties(re2 PROPERTIES SOVERSION ${SONAME} VERSION ${SONAME}.0.0)
 add_library(re2::re2 ALIAS re2)
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC" AND BUILD_SHARED_LIBS)
-  set_target_properties(re2 PROPERTIES
-                        WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif()
-
 if(APPLE AND RE2_BUILD_FRAMEWORK)
   set_target_properties(re2 PROPERTIES
                         FRAMEWORK TRUE
@@ -185,6 +183,9 @@ if(RE2_BUILD_TESTING)
       )
 
   add_library(testing ${TESTING_SOURCES})
+  if(BUILD_SHARED_LIBS AND WIN32)
+    target_compile_definitions(testing PRIVATE -DRE2_BUILD_TESTING_DLL)
+  endif()
   target_compile_features(testing PUBLIC cxx_std_14)
   target_link_libraries(testing PUBLIC re2 GTest::gtest)
 
@@ -218,6 +219,9 @@ if(RE2_BUILD_TESTING)
 
   foreach(target ${TEST_TARGETS})
     add_executable(${target} re2/testing/${target}.cc)
+    if(BUILD_SHARED_LIBS AND WIN32)
+      target_compile_definitions(${target} PRIVATE -DRE2_CONSUME_TESTING_DLL)
+    endif()
     target_compile_features(${target} PUBLIC cxx_std_14)
     target_link_libraries(${target} PUBLIC testing GTest::gtest_main ${EXTRA_TARGET_LINK_LIBRARIES})
     add_test(NAME ${target} COMMAND ${target})
@@ -225,6 +229,9 @@ if(RE2_BUILD_TESTING)
 
   foreach(target ${BENCHMARK_TARGETS})
     add_executable(${target} re2/testing/${target}.cc)
+    if(BUILD_SHARED_LIBS AND WIN32)
+      target_compile_definitions(${target} PRIVATE -DRE2_CONSUME_TESTING_DLL)
+    endif()
     target_compile_features(${target} PUBLIC cxx_std_14)
     target_link_libraries(${target} PUBLIC testing benchmark::benchmark_main ${EXTRA_TARGET_LINK_LIBRARIES})
   endforeach()
